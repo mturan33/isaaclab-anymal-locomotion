@@ -29,7 +29,7 @@ class MyAnymalProjectEnvCfg(DirectRLEnvCfg):
     robot_cfg: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="/World/envs/env_.*/Robot")
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=64, env_spacing=4.0, replicate_physics=True) # 4096 → 64 (test için küçük)
 
     # custom parameters/scales
     # - controllable joint
@@ -38,7 +38,7 @@ class MyAnymalProjectEnvCfg(DirectRLEnvCfg):
     # - action scale
     action_scale = 100.0  # [N]
     # - reward scales
-    rew_scale_alive = 1.0
+    rew_scale_alive = 2.0
     rew_scale_terminated = -2.0
     rew_scale_pole_pos = -1.0
     rew_scale_cart_vel = -0.01

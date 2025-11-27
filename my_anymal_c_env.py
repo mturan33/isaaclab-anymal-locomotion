@@ -20,17 +20,11 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 import isaaclab.utils.math as math_utils
 # ========================================
 
-# DÜZELTME: Doğru dosya adı
 from .my_anymal_c_env_cfg import MyAnymalFlatEnvCfg, MyAnymalRoughEnvCfg
 
 
 def define_velocity_markers() -> VisualizationMarkersCfg:
-    """Define markers for velocity command visualization.
-
-    - Red arrow: Commanded velocity direction (where robot should go)
-    - Green arrow: Actual velocity direction (where robot is going)
-    - Cyan arrow: Robot forward direction (heading)
-    """
+    """Define markers for velocity command visualization."""
     marker_cfg = VisualizationMarkersCfg(
         prim_path="/Visuals/VelocityMarkers",
         markers={
@@ -60,21 +54,20 @@ class MyAnymalEnv(DirectRLEnv):
     def __init__(self, cfg: MyAnymalFlatEnvCfg | MyAnymalRoughEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # Joint position command (deviation from default joint positions)
         self._actions = torch.zeros(self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device)
         self._previous_actions = torch.zeros(
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
         )
 
-        # X/Y linear velocity and yaw angular velocity commands
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)
 
         # ============ MARKER SETUP ============
         self._marker_offset = torch.tensor([0.0, 0.0, 0.7], device=self.device)
         self._up_vec = torch.tensor([0.0, 0.0, 1.0], device=self.device).repeat(self.num_envs, 1)
+        # Default scales for markers
+        self._marker_scale = torch.ones(self.num_envs, 3, device=self.device)
         # ======================================
 
-        # Logging
         self._episode_sums = {
             key: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
             for key in [
@@ -91,7 +84,6 @@ class MyAnymalEnv(DirectRLEnv):
                 "flat_orientation_l2",
             ]
         }
-        # Get specific body indices
         self._base_id, _ = self._contact_sensor.find_bodies("base")
         self._feet_ids, _ = self._contact_sensor.find_bodies(".*FOOT")
         self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*THIGH")
@@ -201,21 +193,31 @@ class MyAnymalEnv(DirectRLEnv):
             marker_pos,
             marker_pos + offset_actual,
             marker_pos + offset_heading,
-        ], dim=0)
+        ], dim=0)  # (num_envs * 3, 3)
 
         all_orientations = torch.cat([
             cmd_quat_world,
             actual_quat,
             heading_quat,
-        ], dim=0)
+        ], dim=0)  # (num_envs * 3, 4)
 
+        # Create marker indices: 0=command(red), 1=actual(green), 2=heading(cyan)
         marker_indices = torch.cat([
             torch.zeros(self.num_envs, dtype=torch.long, device=self.device),
             torch.ones(self.num_envs, dtype=torch.long, device=self.device),
             torch.full((self.num_envs,), 2, dtype=torch.long, device=self.device),
         ], dim=0)
 
-        self._velocity_markers.visualize(all_positions, all_orientations, marker_indices)
+        # Create scales tensor (num_envs * 3, 3) - all ones for default scale
+        all_scales = torch.ones(self.num_envs * 3, 3, device=self.device)
+
+        # Visualize all markers with scales
+        self._velocity_markers.visualize(
+            translations=all_positions,
+            orientations=all_orientations,
+            scales=all_scales,
+            marker_indices=marker_indices
+        )
 
     def _get_rewards(self) -> torch.Tensor:
         lin_vel_error = torch.sum(torch.square(self._commands[:, :2] - self._robot.data.root_lin_vel_b[:, :2]), dim=1)

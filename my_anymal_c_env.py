@@ -20,7 +20,8 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 import isaaclab.utils.math as math_utils
 # ========================================
 
-from .my_anymal_env_cfg import MyAnymalFlatEnvCfg, MyAnymalRoughEnvCfg
+# DÜZELTME: Doğru dosya adı
+from .my_anymal_c_env_cfg import MyAnymalFlatEnvCfg, MyAnymalRoughEnvCfg
 
 
 def define_velocity_markers() -> VisualizationMarkersCfg:
@@ -35,7 +36,7 @@ def define_velocity_markers() -> VisualizationMarkersCfg:
         markers={
             "velocity_command": sim_utils.UsdFileCfg(
                 usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/arrow_x.usd",
-                scale=(0.5, 0.5, 1.0),  # Longer arrow for visibility
+                scale=(0.5, 0.5, 1.0),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),  # Red
             ),
             "velocity_actual": sim_utils.UsdFileCfg(
@@ -69,9 +70,7 @@ class MyAnymalEnv(DirectRLEnv):
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)
 
         # ============ MARKER SETUP ============
-        # Marker offset above robot (z direction)
         self._marker_offset = torch.tensor([0.0, 0.0, 0.7], device=self.device)
-        # Up vector for quaternion calculations
         self._up_vec = torch.tensor([0.0, 0.0, 1.0], device=self.device).repeat(self.num_envs, 1)
         # ======================================
 
@@ -104,7 +103,6 @@ class MyAnymalEnv(DirectRLEnv):
         self.scene.sensors["contact_sensor"] = self._contact_sensor
 
         if isinstance(self.cfg, MyAnymalRoughEnvCfg):
-            # height scanner for perceptive locomotion
             self._height_scanner = RayCaster(self.cfg.height_scanner)
             self.scene.sensors["height_scanner"] = self._height_scanner
 
@@ -112,14 +110,11 @@ class MyAnymalEnv(DirectRLEnv):
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
 
-        # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
 
-        # explicitly filter collisions for CPU simulation
         if self.device == "cpu":
             self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
 
-        # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
@@ -171,100 +166,76 @@ class MyAnymalEnv(DirectRLEnv):
 
     def _visualize_velocity_markers(self):
         """Visualize velocity command and actual velocity as arrows above each robot."""
-        # Get robot base positions in world frame
-        base_pos_w = self._robot.data.root_pos_w  # (num_envs, 3)
-        base_quat_w = self._robot.data.root_quat_w  # (num_envs, 4) - robot orientation
+        base_pos_w = self._robot.data.root_pos_w
+        base_quat_w = self._robot.data.root_quat_w
 
-        # Offset markers above the robot
         marker_pos = base_pos_w + self._marker_offset
 
-        # 1. COMMAND VELOCITY ARROW (Red) - where robot should go
-        # Commands are in body frame: [vx, vy, yaw_rate]
-        cmd_vx = self._commands[:, 0]  # Forward velocity
-        cmd_vy = self._commands[:, 1]  # Lateral velocity
+        # 1. COMMAND VELOCITY ARROW (Red)
+        cmd_vx = self._commands[:, 0]
+        cmd_vy = self._commands[:, 1]
+        cmd_yaw_body = torch.atan2(cmd_vy, cmd_vx)
 
-        # Calculate yaw angle from velocity command in body frame
-        cmd_yaw_body = torch.atan2(cmd_vy, cmd_vx)  # (num_envs,)
-
-        # Get robot yaw from quaternion (extract yaw component)
-        # Quaternion format: (w, x, y, z)
+        # Extract robot yaw from quaternion (w, x, y, z)
         qw, qx, qy, qz = base_quat_w[:, 0], base_quat_w[:, 1], base_quat_w[:, 2], base_quat_w[:, 3]
         robot_yaw = torch.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
 
-        # Command direction in world frame = robot_yaw + cmd_yaw_body
         cmd_yaw_world = robot_yaw + cmd_yaw_body
         cmd_quat_world = math_utils.quat_from_angle_axis(cmd_yaw_world, self._up_vec)
 
-        # 2. ACTUAL VELOCITY ARROW (Green) - where robot is actually going
-        actual_vel_w = self._robot.data.root_lin_vel_w[:, :2]  # World frame velocity
+        # 2. ACTUAL VELOCITY ARROW (Green)
+        actual_vel_w = self._robot.data.root_lin_vel_w[:, :2]
         actual_vx = actual_vel_w[:, 0]
         actual_vy = actual_vel_w[:, 1]
         actual_yaw = torch.atan2(actual_vy, actual_vx)
         actual_quat = math_utils.quat_from_angle_axis(actual_yaw, self._up_vec)
 
-        # 3. HEADING ARROW (Cyan) - robot forward direction
-        heading_quat = base_quat_w  # Robot's current orientation
+        # 3. HEADING ARROW (Cyan)
+        heading_quat = base_quat_w
 
-        # Stack all marker positions (3 markers per robot)
-        # Order: command, actual, heading
+        # Stack positions
         offset_actual = torch.tensor([0.0, 0.0, 0.1], device=self.device)
         offset_heading = torch.tensor([0.0, 0.0, 0.2], device=self.device)
 
         all_positions = torch.cat([
-            marker_pos,  # Command arrow position
-            marker_pos + offset_actual,  # Actual (slightly higher)
-            marker_pos + offset_heading,  # Heading (highest)
-        ], dim=0)  # (num_envs * 3, 3)
+            marker_pos,
+            marker_pos + offset_actual,
+            marker_pos + offset_heading,
+        ], dim=0)
 
-        # Stack all orientations
         all_orientations = torch.cat([
             cmd_quat_world,
             actual_quat,
             heading_quat,
-        ], dim=0)  # (num_envs * 3, 4)
-
-        # Create marker indices: 0=command(red), 1=actual(green), 2=heading(cyan)
-        marker_indices = torch.cat([
-            torch.zeros(self.num_envs, dtype=torch.long, device=self.device),  # Command markers
-            torch.ones(self.num_envs, dtype=torch.long, device=self.device),  # Actual markers
-            torch.full((self.num_envs,), 2, dtype=torch.long, device=self.device),  # Heading markers
         ], dim=0)
 
-        # Visualize all markers
+        marker_indices = torch.cat([
+            torch.zeros(self.num_envs, dtype=torch.long, device=self.device),
+            torch.ones(self.num_envs, dtype=torch.long, device=self.device),
+            torch.full((self.num_envs,), 2, dtype=torch.long, device=self.device),
+        ], dim=0)
+
         self._velocity_markers.visualize(all_positions, all_orientations, marker_indices)
 
     def _get_rewards(self) -> torch.Tensor:
-        # linear velocity tracking
         lin_vel_error = torch.sum(torch.square(self._commands[:, :2] - self._robot.data.root_lin_vel_b[:, :2]), dim=1)
         lin_vel_error_mapped = torch.exp(-lin_vel_error / 0.25)
 
-        # yaw rate tracking
         yaw_rate_error = torch.square(self._commands[:, 2] - self._robot.data.root_ang_vel_b[:, 2])
         yaw_rate_error_mapped = torch.exp(-yaw_rate_error / 0.25)
 
-        # z velocity tracking
         z_vel_error = torch.square(self._robot.data.root_lin_vel_b[:, 2])
-
-        # angular velocity x/y
         ang_vel_error = torch.sum(torch.square(self._robot.data.root_ang_vel_b[:, :2]), dim=1)
-
-        # joint torques
         joint_torques = torch.sum(torch.square(self._robot.data.applied_torque), dim=1)
-
-        # joint acceleration
         joint_accel = torch.sum(torch.square(self._robot.data.joint_acc), dim=1)
-
-        # action rate
         action_rate = torch.sum(torch.square(self._actions - self._previous_actions), dim=1)
 
-        # feet air time
         first_contact = self._contact_sensor.compute_first_contact(self.step_dt)[:, self._feet_ids]
         last_air_time = self._contact_sensor.data.last_air_time[:, self._feet_ids]
         air_time = torch.sum((last_air_time - 0.5) * first_contact, dim=1) * (
                 torch.norm(self._commands[:, :2], dim=1) > 0.1
         )
 
-        # undesired contacts
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
         is_contact = (
                 torch.max(torch.norm(net_contact_forces[:, :, self._undesired_contact_body_ids], dim=-1), dim=1)[
@@ -272,11 +243,9 @@ class MyAnymalEnv(DirectRLEnv):
         )
         contacts = torch.sum(is_contact, dim=1)
 
-        # flat orientation
         flat_orientation = torch.sum(torch.square(self._robot.data.projected_gravity_b[:, :2]), dim=1)
 
-        # İleri hareket bonusu
-        forward_vel = self._robot.data.root_lin_vel_b[:, 0]  # X yönü (ileri)
+        forward_vel = self._robot.data.root_lin_vel_b[:, 0]
         forward_bonus = torch.clamp(forward_vel, min=0.0, max=2.0) * 0.5
 
         rewards = {
@@ -295,7 +264,6 @@ class MyAnymalEnv(DirectRLEnv):
 
         reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
 
-        # Logging
         for key, value in rewards.items():
             self._episode_sums[key] += value
         return reward
@@ -314,16 +282,13 @@ class MyAnymalEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
 
         if len(env_ids) == self.num_envs:
-            # Spread out resets to avoid training spikes
             self.episode_length_buf[:] = torch.randint_like(self.episode_length_buf, high=int(self.max_episode_length))
 
         self._actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
 
-        # Sample new commands
         self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
 
-        # Minimum command magnitude
         command_magnitude = torch.norm(self._commands[env_ids, :2], dim=1, keepdim=True)
         mask = command_magnitude < 0.3
         self._commands[env_ids, :2] = torch.where(
@@ -332,7 +297,6 @@ class MyAnymalEnv(DirectRLEnv):
             self._commands[env_ids, :2]
         )
 
-        # Reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
         joint_vel = self._robot.data.default_joint_vel[env_ids]
         default_root_state = self._robot.data.default_root_state[env_ids]
@@ -342,7 +306,6 @@ class MyAnymalEnv(DirectRLEnv):
         self._robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
-        # Logging
         extras = dict()
         for key in self._episode_sums.keys():
             episodic_sum_avg = torch.mean(self._episode_sums[key][env_ids])

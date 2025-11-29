@@ -504,19 +504,18 @@ def train():
         mean_critic_loss = total_critic_loss / num_updates
         mean_entropy = total_entropy / num_updates
 
-        # TensorBoard logging
-        writer.add_scalar("Loss/actor", mean_actor_loss, iteration)
-        writer.add_scalar("Loss/critic", mean_critic_loss, iteration)
+        # TensorBoard logging - RSL-RL UYUMLU TAG İSİMLERİ
+        writer.add_scalar("Loss/surrogate", mean_actor_loss, iteration)  # RSL-RL: Loss/surrogate
+        writer.add_scalar("Loss/value_function", mean_critic_loss, iteration)  # RSL-RL: Loss/value_function
         writer.add_scalar("Loss/entropy", mean_entropy, iteration)
+        writer.add_scalar("Loss/learning_rate", scheduler.get_last_lr()[0], iteration)  # RSL-RL: Loss/learning_rate
         writer.add_scalar("Train/mean_reward", mean_reward, iteration)
         writer.add_scalar("Train/mean_episode_reward", mean_episode_reward, iteration)
         writer.add_scalar("Train/mean_episode_length", mean_episode_length, iteration)
-        writer.add_scalar("Train/action_std", mean_std, iteration)
-        writer.add_scalar("Train/learning_rate", scheduler.get_last_lr()[0], iteration)
-        writer.add_scalar("Perf/steps_per_sec", steps_per_sec, iteration)
-        writer.add_scalar("Perf/collection_time", collection_time, iteration)
+        writer.add_scalar("Policy/mean_noise_std", mean_std, iteration)  # RSL-RL: Policy/mean_noise_std
+        writer.add_scalar("Perf/total_fps", steps_per_sec, iteration)  # RSL-RL: Perf/total_fps
+        writer.add_scalar("Perf/collection time", collection_time, iteration)  # RSL-RL format
         writer.add_scalar("Perf/learning_time", learning_time, iteration)
-        writer.add_scalar("Perf/total_timesteps", total_timesteps, iteration)
 
         # Log reward components
         for key, values_deque in reward_components.items():

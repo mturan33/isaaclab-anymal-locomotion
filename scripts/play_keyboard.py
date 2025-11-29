@@ -147,9 +147,9 @@ class QuadrupedKeyboardController:
     def __init__(self):
         self._base_command = np.array([0.0, 0.0, 0.0])  # [vx, vy, yaw_rate]
 
-        # Velocity limits
-        self._max_lin_vel = 1.5   # m/s
-        self._max_ang_vel = 1.5   # rad/s
+        # Velocity limits - DÜŞÜRÜLDÜ (training ile uyumlu)
+        self._max_lin_vel = 0.8   # m/s (1.5'ten düşürüldü)
+        self._max_ang_vel = 0.8   # rad/s (1.5'ten düşürüldü)
 
         # Key bindings: key_name -> [vx_delta, vy_delta, yaw_delta]
         # Multiple keys can map to same command

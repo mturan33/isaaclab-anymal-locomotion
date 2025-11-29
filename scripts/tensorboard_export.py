@@ -7,19 +7,19 @@ Exports and compares training curves from RSL-RL and Custom PPO.
 Usage:
     python tensorboard_export.py --rsl_rl_log <path> --custom_ppo_log <path> --output <output_dir>
 
-Example:
-    python tensorboard_export.py \
-        --rsl_rl_log logs/rsl_rl/anymal_c_flat_direct/2025-11-27_11-57-46 \
-        --custom_ppo_log logs/rsl_rl/custom_ppo_v2/2025-11-28_20-39-37 \
-        --output comparison_plots \
-        --max_iter 1000
+Example (Windows - single line):
+    python tensorboard_export.py --rsl_rl_log logs/rsl_rl/anymal_c_flat_direct/2025-11-28_12-15-24 --custom_ppo_log logs/rsl_rl/custom_ppo_v2/2025-11-28_20-39-37 --output comparison_plots --max_iter 10000
 """
 
 import argparse
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+
+# Use Agg backend for non-interactive plotting
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
@@ -280,12 +280,62 @@ def main():
     # Create plots
     print(f"\n[INFO] Creating comparison plots in: {args.output}")
 
-    # Summary plot
+    # Tag mapping - Custom PPO'dan RSL-RL formatına
+    # Bu sayede farklı isimli ama aynı anlama gelen metrikler karşılaştırılabilir
+    tag_equivalents = {
+        'Train/mean_episode_reward': 'Train/mean_reward',  # Custom PPO versiyonu
+    }
+
+    # Summary plot - full range
     create_summary_plot(rsl_data, custom_data, args.output, args.max_iter)
 
-    # LinkedIn plot
-    create_linkedin_plot(rsl_data, custom_data, args.output,
-                         max_iter=args.max_iter or 1000)
+    # LinkedIn plots - hem 1K hem 10K
+    create_linkedin_plot(rsl_data, custom_data, args.output, max_iter=1000)
+
+    # 10K versiyonu için ayrı dosya
+    if args.max_iter and args.max_iter > 1000:
+        # Create separate 10K plot
+        fig, ax = plt.subplots(figsize=(14, 7))
+        ax.set_facecolor('white')
+        fig.patch.set_facecolor('white')
+
+        tag = 'Train/mean_reward'
+        if tag in rsl_data:
+            df = rsl_data[tag]
+            if args.max_iter:
+                df = df[df['step'] <= args.max_iter]
+            ax.plot(df['step'], df['value'], label='RSL-RL PPO',
+                    color='#FF6B35', linewidth=3, alpha=0.9)
+
+        if tag in custom_data:
+            df = custom_data[tag]
+            if args.max_iter:
+                df = df[df['step'] <= args.max_iter]
+            ax.plot(df['step'], df['value'], label='Custom PPO (From Scratch)',
+                    color='#004E89', linewidth=3, alpha=0.9)
+
+        ax.set_xlabel('Training Iteration', fontsize=14, fontweight='bold')
+        ax.set_ylabel('Mean Episode Reward', fontsize=14, fontweight='bold')
+        ax.set_title(f'From-Scratch PPO vs RSL-RL ({args.max_iter} iterations)\nIsaac Lab Anymal-C Quadruped',
+                     fontsize=16, fontweight='bold', pad=20)
+        ax.legend(fontsize=12, loc='lower right', framealpha=0.9)
+        ax.grid(True, alpha=0.3, linestyle='--')
+
+        # Final values annotation
+        if tag in rsl_data and tag in custom_data:
+            rsl_final = rsl_data[tag]['value'].iloc[-1]
+            custom_final = custom_data[tag]['value'].iloc[-1]
+            ratio = (custom_final / rsl_final) * 100
+            ax.annotate(f'{ratio:.0f}% Performance Match!',
+                        xy=(args.max_iter * 0.8, custom_final), fontsize=14, fontweight='bold',
+                        color='#2E7D32',
+                        bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F5E9', edgecolor='#2E7D32'))
+
+        plt.tight_layout()
+        output_path = os.path.join(args.output, f'linkedin_comparison_{args.max_iter}.png')
+        plt.savefig(output_path, dpi=200, bbox_inches='tight', facecolor='white')
+        plt.close()
+        print(f"[SAVED] {output_path}")
 
     # Individual metric plots
     common_tags = ['Train/mean_reward', 'Policy/mean_noise_std',
@@ -299,6 +349,9 @@ def main():
     print_final_stats(rsl_data, custom_data)
 
     print(f"\n[DONE] All plots saved to: {args.output}")
+    print("\n[TIP] Recommended for LinkedIn/README:")
+    print("  - linkedin_comparison.png (1K iter) - Shows early convergence")
+    print(f"  - linkedin_comparison_{args.max_iter}.png - Shows final performance") if args.max_iter else None
 
 
 if __name__ == "__main__":

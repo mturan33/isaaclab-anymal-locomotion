@@ -141,15 +141,21 @@ class SimpleActorCritic(nn.Module):
 class QuadrupedKeyboardController:
     """
     Keyboard controller following official Spot example pattern.
-    Uses increment/decrement style - hold key to increase velocity.
+    Uses smooth ramping for velocity changes.
     """
 
     def __init__(self):
         self._base_command = np.array([0.0, 0.0, 0.0])  # [vx, vy, yaw_rate]
+        self._target_command = np.array([0.0, 0.0, 0.0])  # Target velocity
+        self._current_command = np.array([0.0, 0.0, 0.0])  # Smoothed velocity
 
-        # Velocity limits - DÜŞÜRÜLDÜ (training ile uyumlu)
-        self._max_lin_vel = 0.8   # m/s (1.5'ten düşürüldü)
-        self._max_ang_vel = 0.8   # rad/s (1.5'ten düşürüldü)
+        # Velocity limits - Training range ile uyumlu
+        # Isaac Lab Anymal-C default: lin_vel_x=(-1,1), lin_vel_y=(-1,1), ang_vel_z=(-1,1)
+        self._max_lin_vel = 0.5   # m/s - Conservative for stability
+        self._max_ang_vel = 0.5   # rad/s - Conservative for stability
+
+        # Smoothing parameters - Yumuşak geçiş için
+        self._ramp_rate = 0.05  # Velocity change per step (lower = smoother)
 
         # Key bindings: key_name -> [vx_delta, vy_delta, yaw_delta]
         # Multiple keys can map to same command
@@ -185,6 +191,9 @@ class QuadrupedKeyboardController:
             "NUMPAD_9": [0.0, 0.0, -self._max_ang_vel],
         }
 
+        # Active keys tracking
+        self._active_keys = set()
+
         # Flags
         self._reset_requested = False
         self._quit_requested = False
@@ -197,40 +206,54 @@ class QuadrupedKeyboardController:
             self._keyboard, self._on_keyboard_event
         )
 
-        print("[KEYBOARD] Controller initialized")
+        print("[KEYBOARD] Controller initialized (smooth ramping enabled)")
 
     def _on_keyboard_event(self, event, *args, **kwargs) -> bool:
-        """Handle keyboard events - increment on press, decrement on release."""
+        """Handle keyboard events - track active keys."""
 
         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
-            # On press: add velocity
             key_name = event.input.name
             if key_name in self._input_keyboard_mapping:
-                self._base_command += np.array(self._input_keyboard_mapping[key_name])
+                self._active_keys.add(key_name)
             elif key_name == "R":
                 self._reset_requested = True
             elif key_name == "ESCAPE":
                 self._quit_requested = True
 
         elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
-            # On release: subtract velocity
             key_name = event.input.name
-            if key_name in self._input_keyboard_mapping:
-                self._base_command -= np.array(self._input_keyboard_mapping[key_name])
+            if key_name in self._active_keys:
+                self._active_keys.discard(key_name)
 
         return True
 
     def get_command(self, device) -> torch.Tensor:
-        """Get current velocity command as tensor."""
-        # Clamp to limits
-        cmd = np.clip(self._base_command,
-                      [-self._max_lin_vel, -self._max_lin_vel, -self._max_ang_vel],
-                      [self._max_lin_vel, self._max_lin_vel, self._max_ang_vel])
-        return torch.tensor([cmd], device=device, dtype=torch.float32)
+        """Get current velocity command with smooth ramping."""
+        # Calculate target from active keys
+        self._target_command = np.array([0.0, 0.0, 0.0])
+        for key in self._active_keys:
+            if key in self._input_keyboard_mapping:
+                self._target_command += np.array(self._input_keyboard_mapping[key])
+
+        # Clamp target to limits
+        self._target_command = np.clip(
+            self._target_command,
+            [-self._max_lin_vel, -self._max_lin_vel, -self._max_ang_vel],
+            [self._max_lin_vel, self._max_lin_vel, self._max_ang_vel]
+        )
+
+        # Smooth ramping towards target
+        diff = self._target_command - self._current_command
+        self._current_command += np.clip(diff, -self._ramp_rate, self._ramp_rate)
+
+        return torch.tensor([self._current_command], device=device, dtype=torch.float32)
 
     def reset_command(self):
         """Reset velocity command to zero."""
         self._base_command = np.array([0.0, 0.0, 0.0])
+        self._target_command = np.array([0.0, 0.0, 0.0])
+        self._current_command = np.array([0.0, 0.0, 0.0])
+        self._active_keys.clear()
 
     @property
     def reset_requested(self) -> bool:
@@ -244,8 +267,9 @@ class QuadrupedKeyboardController:
 
     def print_status(self):
         """Print current command status."""
-        vx, vy, yaw = self._base_command
-        print(f"\r[CMD] Vx: {vx:+.2f} m/s | Vy: {vy:+.2f} m/s | Yaw: {yaw:+.2f} rad/s    ", end="", flush=True)
+        vx, vy, yaw = self._current_command
+        tx, ty, tyaw = self._target_command
+        print(f"\r[CMD] Vx: {vx:+.2f}/{tx:+.2f} | Vy: {vy:+.2f}/{ty:+.2f} | Yaw: {yaw:+.2f}/{tyaw:+.2f}    ", end="", flush=True)
 
 
 # =============================================================================

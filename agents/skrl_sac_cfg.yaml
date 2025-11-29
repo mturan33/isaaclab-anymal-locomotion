@@ -15,7 +15,7 @@ models:
     class: "DeterministicMixin"
     layers: [256, 256, 256]
     activation: "elu"
-  critic_2:  # Twin Q-networks (SAC özelliği)
+  critic_2:  # Twin Q-networks
     class: "DeterministicMixin"
     layers: [256, 256, 256]
     activation: "elu"
@@ -27,7 +27,7 @@ agent:
   actor_learning_rate: 3.0e-4
   critic_learning_rate: 1.0e-3
   # SAC specific
-  learn_entropy: true  # Otomatik alpha ayarlama
+  learn_entropy: true
   entropy_learning_rate: 3.0e-4
   initial_entropy_value: 0.2
   target_entropy: "auto"  # -dim(action_space)

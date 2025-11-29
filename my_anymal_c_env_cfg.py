@@ -85,7 +85,7 @@ class MyAnymalFlatEnvCfg(DirectRLEnvCfg):
 
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=64,  # Başlangıç için az environment
+        num_envs=64,
         env_spacing=4.0,
         replicate_physics=True
     )

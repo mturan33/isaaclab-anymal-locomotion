@@ -253,9 +253,9 @@ class RolloutBuffer:
 
 def train():
     # =========================================================================
-    # HYPERPARAMETERS (RSL-RL compatible)
+    # HYPERPARAMETERS
     # =========================================================================
-    learning_rate = 1e-3  # RSL-RL default
+    learning_rate = 1e-3
     gamma = 0.99
     gae_lambda = 0.95
     clip_param = 0.2
@@ -265,17 +265,14 @@ def train():
     value_loss_coef = 1.0
     max_grad_norm = 1.0
 
-    # STD - MODEL KENDİSİ ÖĞRENİR (RSL-RL tarzı)
-    # log_std optimizer tarafından güncellenir, manuel decay YOK
-    # Düşük entropy_coef = STD daha hızlı düşer
     init_noise_std = 1.0
-    entropy_coef = 0.001  # Düşürüldü: 0.005 → 0.001 (RSL-RL tarzı)
+    entropy_coef = 0.001
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(args_cli.seed)
 
     # =========================================================================
-    # LOGGING SETUP - logs/rsl_rl dizini (RSL-RL ile aynı yerde)
+    # LOGGING SETUP
     # =========================================================================
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_root = os.path.join("logs", "rsl_rl", args_cli.experiment_name)
@@ -307,18 +304,17 @@ def train():
     print(f"[INFO] Num envs: {num_envs}")
 
     # =========================================================================
-    # MODEL SETUP - RSL-RL compatible architecture
+    # MODEL SETUP
     # =========================================================================
     actor_critic = ActorCriticNetwork(
         num_obs=num_obs,
         num_actions=num_actions,
-        hidden_dims=[128, 128, 128],  # RSL-RL default
+        hidden_dims=[128, 128, 128],
         init_noise_std=1.0,
     ).to(device)
 
     obs_normalizer = EmpiricalNormalization((num_obs,)).to(device)
 
-    # TÜM parametreler optimizer'da - log_std DAHİL (model STD'yi kendisi öğrenir)
     optimizer = torch.optim.Adam(actor_critic.parameters(), lr=learning_rate, eps=1e-5)
     print(f"[INFO] Optimizer params: {sum(p.numel() for p in actor_critic.parameters())} (log_std included - learnable)")
 
@@ -353,7 +349,7 @@ def train():
     current_episode_rewards = torch.zeros(num_envs, device=device)
     current_episode_lengths = torch.zeros(num_envs, device=device)
 
-    # Reward components tracking (from environment extras)
+    # Reward components tracking
     reward_components = {}
     termination_components = {}
 
@@ -480,10 +476,6 @@ def train():
 
         scheduler.step()
 
-        # STD artık MODEL tarafından öğreniliyor - manuel decay YOK
-        # Entropy loss ile exploration teşvik edilir
-        # Gradient'ler log_std'yi otomatik olarak optimize eder
-
         learning_time = time.time() - learning_start
 
         # =====================================================================
@@ -504,17 +496,16 @@ def train():
         mean_critic_loss = total_critic_loss / num_updates
         mean_entropy = total_entropy / num_updates
 
-        # TensorBoard logging - RSL-RL UYUMLU TAG İSİMLERİ
-        writer.add_scalar("Loss/surrogate", mean_actor_loss, iteration)  # RSL-RL: Loss/surrogate
-        writer.add_scalar("Loss/value_function", mean_critic_loss, iteration)  # RSL-RL: Loss/value_function
+        writer.add_scalar("Loss/surrogate", mean_actor_loss, iteration)
+        writer.add_scalar("Loss/value_function", mean_critic_loss, iteration)
         writer.add_scalar("Loss/entropy", mean_entropy, iteration)
-        writer.add_scalar("Loss/learning_rate", scheduler.get_last_lr()[0], iteration)  # RSL-RL: Loss/learning_rate
+        writer.add_scalar("Loss/learning_rate", scheduler.get_last_lr()[0], iteration)
         writer.add_scalar("Train/mean_reward", mean_reward, iteration)
         writer.add_scalar("Train/mean_episode_reward", mean_episode_reward, iteration)
         writer.add_scalar("Train/mean_episode_length", mean_episode_length, iteration)
-        writer.add_scalar("Policy/mean_noise_std", mean_std, iteration)  # RSL-RL: Policy/mean_noise_std
-        writer.add_scalar("Perf/total_fps", steps_per_sec, iteration)  # RSL-RL: Perf/total_fps
-        writer.add_scalar("Perf/collection time", collection_time, iteration)  # RSL-RL format
+        writer.add_scalar("Policy/mean_noise_std", mean_std, iteration)
+        writer.add_scalar("Perf/total_fps", steps_per_sec, iteration)
+        writer.add_scalar("Perf/collection time", collection_time, iteration)
         writer.add_scalar("Perf/learning_time", learning_time, iteration)
 
         # Log reward components

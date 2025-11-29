@@ -2,10 +2,9 @@
 Isaac Lab PPO Implementation - From Scratch
 ============================================
 
-Bu kod, MuJoCo PPO implementasyonundan Isaac Lab'ın GPU-paralel
-ortamına adaptasyon sürecini gösterir.
+This code demonstrates the process of adapting the MuJoCo PPO implementation to Isaac Lab's GPU-parallel environment.
 
-TEMEL FARKLAR:
+KEY DIFFERENCES:
 --------------
 1. CPU NumPy → GPU PyTorch Tensors
 2. Sequential env → Batched parallel envs (4096)
@@ -13,7 +12,7 @@ TEMEL FARKLAR:
 4. Experience replay → On-policy rollout buffer
 5. Individual updates → Batched tensor operations
 
-Author: Turan
+Author: Mehmet Turan YARDIMCI
 """
 
 import torch
@@ -25,7 +24,7 @@ import math
 
 
 # =============================================================================
-# BÖLÜM 1: RUNNING STATISTICS (Observation & Reward Normalization)
+# SECTION 1: RUNNING STATISTICS (Observation & Reward Normalization)
 # =============================================================================
 
 class EmpiricalNormalization(nn.Module):
@@ -113,7 +112,7 @@ class EmpiricalNormalization(nn.Module):
 
 
 # =============================================================================
-# BÖLÜM 2: ACTOR-CRITIC NETWORK
+# SECTION 2: ACTOR-CRITIC NETWORK
 # =============================================================================
 
 class ActorCriticNetwork(nn.Module):
@@ -355,7 +354,7 @@ class ActorCriticNetwork(nn.Module):
 
 
 # =============================================================================
-# BÖLÜM 3: ROLLOUT BUFFER
+# SECTION 3: ROLLOUT BUFFER
 # =============================================================================
 
 class RolloutBuffer:
@@ -542,7 +541,7 @@ class RolloutBuffer:
 
 
 # =============================================================================
-# BÖLÜM 4: PPO ALGORITHM
+# SECTION 4: PPO ALGORITHM
 # =============================================================================
 
 class PPOAlgorithm:
@@ -812,7 +811,7 @@ class PPOAlgorithm:
 
 
 # =============================================================================
-# BÖLÜM 5: RUNNER (Training Loop)
+# SECTION 5: RUNNER (Training Loop)
 # =============================================================================
 
 class PPORunner:

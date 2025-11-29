@@ -149,7 +149,7 @@ Interactive control of the trained robot with keyboard inputs:
 | `R` | Reset Robot |
 | `ESC` | Quit |
 
-### 📈 TensorBoard Monitoring
+### TensorBoard Monitoring
 
 ```bash
 # Start TensorBoard
